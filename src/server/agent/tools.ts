@@ -51,8 +51,8 @@ export const TOOLS: ToolDef[] = [
   {
     name: "run_command",
     label: "Running commands",
-    description: "Run a bash command on your own computer (Linux; the working directory is your persistent workspace). Use it for scripts, data work, downloads, installing packages, etc.",
-    parameters: obj({ command: str("The bash command to run") }),
+    description: "Run a shell command on your own computer (use bash for Linux cloud/Docker computers; PowerShell for a local Windows workspace; the working directory is your persistent workspace). Use it for scripts, data work, downloads, installing packages, etc.",
+    parameters: obj({ command: str("The shell command to run") }),
     describe: (a) => `run \`${s(a.command)}\` on its own computer`,
     // Isolated computers (cloud/docker) run freely; the sandbox-folder fallback lives on the user's Mac, so ask.
     defaultDecision: (ctx) => (computer.modeFor(ctx.dot.id) === "local" ? "ask" : "allow"),
@@ -141,7 +141,7 @@ export const TOOLS: ToolDef[] = [
   {
     name: "run_on_my_computer",
     label: "On your computer",
-    description: "Run a bash command on the USER's own computer (their Mac). Only use when the task truly needs their machine; prefer your own computer.",
+    description: "Run a shell command on the USER's own computer (PowerShell on Windows, bash on macOS/Linux). Only use when the task truly needs their machine; prefer your own computer.",
     parameters: obj({ command: str("The bash command to run on the user's computer") }),
     describe: (a) => `run \`${s(a.command)}\` on the user's personal computer`,
     defaultDecision: () => "ask",

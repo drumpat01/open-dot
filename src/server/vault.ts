@@ -29,12 +29,36 @@ function masterKey(): Buffer {
       }
     }
   }
+  if (process.platform === "win32") {
+    const file = path.join(DATA_DIR, "vault.key.dpapi");
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    const protect = (value: string, decrypt: boolean) => execFileSync("powershell.exe", [
+      "-NoLogo", "-NoProfile", "-NonInteractive", "-Command",
+      "Add-Type -AssemblyName System.Security; $bytes = [Convert]::FromBase64String([Console]::In.ReadToEnd()); " +
+      (decrypt
+        ? "$result = [Security.Cryptography.ProtectedData]::Unprotect($bytes, $null, [Security.Cryptography.DataProtectionScope]::CurrentUser); "
+        : "$result = [Security.Cryptography.ProtectedData]::Protect($bytes, $null, [Security.Cryptography.DataProtectionScope]::CurrentUser); ") +
+      "[Console]::Out.Write([Convert]::ToBase64String($result))",
+    ], { input: value, encoding: "utf8", windowsHide: true }).trim();
+    if (!fs.existsSync(file)) {
+      // Preserve credentials from an earlier source build when migrating to DPAPI.
+      const legacy = path.join(DATA_DIR, "vault.key");
+      const key = fs.existsSync(legacy) ? Buffer.from(fs.readFileSync(legacy, "utf8").trim(), "hex") : crypto.randomBytes(32);
+      if (key.length !== 32) throw new Error("Invalid vault master key");
+      fs.writeFileSync(file, protect(key.toString("base64"), false), { flag: "wx" });
+      const verified = Buffer.from(protect(fs.readFileSync(file, "utf8"), true), "base64");
+      if (!verified.equals(key)) throw new Error("Vault key protection failed");
+      if (fs.existsSync(legacy)) fs.unlinkSync(legacy);
+    }
+    hex = Buffer.from(protect(fs.readFileSync(file, "utf8"), true), "base64").toString("hex");
+  }
   if (!hex) {
     const file = path.join(DATA_DIR, "vault.key");
     fs.mkdirSync(DATA_DIR, { recursive: true });
     if (!fs.existsSync(file)) fs.writeFileSync(file, crypto.randomBytes(32).toString("hex"), { mode: 0o600 });
     hex = fs.readFileSync(file, "utf8").trim();
   }
+  if (!/^[a-f0-9]{64}$/i.test(hex)) throw new Error("Invalid vault master key");
   g.__dotsVaultKey = Buffer.from(hex, "hex");
   return g.__dotsVaultKey;
 }

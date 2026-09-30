@@ -39,7 +39,7 @@ export function describe(dotId: string): string {
     case "docker":
       return `a Linux container (${BOX_IMAGE}) with a persistent /workspace, plus a Chromium browser`;
     default:
-      return "a sandbox folder on the user's Mac (commands ask first) plus a Chromium browser";
+      return `a workspace folder on the user's ${process.platform === "win32" ? "Windows PC using PowerShell" : "computer using bash"} (commands ask first) plus a Chromium browser`;
   }
 }
 

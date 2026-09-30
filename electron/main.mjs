@@ -2,7 +2,7 @@
 // so nothing else needs installing) and shows it in a window. Closing the window keeps the server running,
 // so dots keep working and routines keep firing; quit from the menu or with ⌘Q.
 
-import { app, BrowserWindow, shell, session, dialog } from "electron";
+import { app, BrowserWindow, shell, session, dialog, Tray, Menu, nativeImage } from "electron";
 import path from "node:path";
 import fs from "node:fs";
 import http from "node:http";
@@ -25,9 +25,11 @@ const isOurs = (url) => {
 let server = null;
 let win = null;
 let quitting = false;
+let tray = null;
 
 // Apps opened from Finder get a bare PATH; dots need the user's tools (git, docker, python, brew…).
 function loginPath() {
+  if (process.platform !== "darwin") return process.env.PATH || "";
   try {
     const shellPath = process.env.SHELL || "/bin/zsh";
     return execFileSync(shellPath, ["-ilc", "printf %s \"$PATH\""], { timeout: 5000, encoding: "utf8" }).trim();
@@ -57,6 +59,7 @@ function startServer() {
       DOTS_DATA_DIR: dataDir,
       DOTS_PUBLIC_URL: `http://localhost:${PORT}`,
     },
+    windowsHide: true,
     stdio: ["ignore", "pipe", "pipe"],
   });
   server.stdout.pipe(log);
@@ -131,7 +134,7 @@ function createWindow() {
 
   // Keep the server (and the dots) running when the window closes; ⌘Q quits for real.
   win.on("close", (e) => {
-    if (process.platform === "darwin" && !quitting) {
+    if ((process.platform === "darwin" || tray) && !quitting) {
       e.preventDefault();
       win.hide();
     }
@@ -161,6 +164,15 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(async () => {
     setPermissions();
     createWindow();
+    if (process.platform === "win32") {
+      app.setAppUserModelId("dev.composio.opendot");
+      const icon = nativeImage.createFromPath(app.isPackaged ? path.join(process.resourcesPath, "icon.png") : path.join(import.meta.dirname, "..", "build", "icon.png"));
+      tray = new Tray(icon.resize({ width: 16, height: 16 }));
+      tray.setToolTip("Open Dot");
+      const show = () => { if (!win) createWindow().loadURL(APP_URL); win.show(); win.focus(); };
+      tray.setContextMenu(Menu.buildFromTemplate([{ label: "Open Open Dot", click: show }, { label: "Quit", click: () => app.quit() }]));
+      tray.on("double-click", show);
+    }
     await win.loadURL(LOADING);
     if (!DEV_URL) startServer();
     try {

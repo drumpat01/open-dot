@@ -3,7 +3,7 @@
 // cp -RP keeps pnpm's relative symlinks exactly as they are.
 import fs from "node:fs";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
+
 
 export default async function afterPack(context) {
   const app = fs.readdirSync(context.appOutDir).find((f) => f.endsWith(".app"));
@@ -11,6 +11,6 @@ export default async function afterPack(context) {
   const from = path.join(context.packager.projectDir, ".desktop", "server", "node_modules");
   const to = path.join(resources, "server", "node_modules");
   fs.rmSync(to, { recursive: true, force: true });
-  execFileSync("cp", ["-RP", from, to]);
+  fs.cpSync(from, to, { recursive: true, dereference: process.platform === "win32", verbatimSymlinks: process.platform !== "win32" });
   console.log(`  • copied server node_modules → ${path.relative(context.appOutDir, to)}`);
 }

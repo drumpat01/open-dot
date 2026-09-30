@@ -2,6 +2,7 @@ import "server-only";
 import { execFile, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import os from "node:os";
 import { DATA_DIR } from "../db";
 
 export const BOX_IMAGE = process.env.DOTS_BOX_IMAGE || "node:22-bookworm";
@@ -26,7 +27,7 @@ const containerName = (dotId: string) => `dot-${dotId.replace(/[^a-z0-9_]/gi, ""
 
 function run(cmd: string, args: string[], opts: { cwd?: string; timeoutMs: number; signal?: AbortSignal }): Promise<string> {
   return new Promise((resolve) => {
-    execFile(cmd, args, { cwd: opts.cwd, timeout: opts.timeoutMs, maxBuffer: 8 * 1024 * 1024, signal: opts.signal }, (err, stdout, stderr) => {
+    execFile(cmd, args, { cwd: opts.cwd, timeout: opts.timeoutMs, maxBuffer: 8 * 1024 * 1024, windowsHide: true, signal: opts.signal }, (err, stdout, stderr) => {
       let out = `${stdout ?? ""}${stderr ? `\n[stderr]\n${stderr}` : ""}`.trim();
       if (err && "code" in err && err.code !== undefined) out += `\n[exit ${String(err.code)}]`;
       if (err && err.name === "AbortError") out += "\n[stopped]";
@@ -51,25 +52,31 @@ async function ensureContainer(dotId: string): Promise<void> {
   ], { timeoutMs: 180_000 });
 }
 
+function runHost(command: string, cwd: string, signal?: AbortSignal): Promise<string> {
+  return process.platform === "win32"
+    ? run("powershell.exe", ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command], { cwd, timeoutMs: 120_000, signal })
+    : run("bash", ["-lc", command], { cwd, timeoutMs: 120_000, signal });
+}
+
 /** Run a shell command on the dot's own computer (its container, or its sandbox folder as a fallback). */
 export async function runOnDotComputer(dotId: string, command: string, signal?: AbortSignal): Promise<string> {
   if (dockerAvailable()) {
     await ensureContainer(dotId);
     return run("docker", ["exec", "-w", "/workspace", containerName(dotId), "bash", "-lc", command], { timeoutMs: 120_000, signal });
   }
-  return run("bash", ["-lc", command], { cwd: workspaceDir(dotId), timeoutMs: 120_000, signal });
+  return runHost(command, workspaceDir(dotId), signal);
 }
 
 /** Run a command on the user's own machine (the computer running this app). Always gated by approvals. */
 export async function runOnUserComputer(command: string, signal?: AbortSignal): Promise<string> {
-  return run("bash", ["-lc", command], { cwd: process.env.HOME, timeoutMs: 120_000, signal });
+  return runHost(command, os.homedir(), signal);
 }
 
 export function resolveWorkspacePath(dotId: string, p: string): string {
   const root = workspaceDir(dotId);
   const rel = p.replace(/^\/?workspace\/?/, "");
   const full = path.resolve(root, rel);
-  if (!full.startsWith(root)) throw new Error("Path must stay inside /workspace");
+  if (path.relative(root, full).startsWith("..") || path.isAbsolute(path.relative(root, full))) throw new Error("Path must stay inside /workspace");
   return full;
 }
 

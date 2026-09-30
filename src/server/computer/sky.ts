@@ -22,6 +22,7 @@ type Launch = { command: string; args: string[]; env: Record<string, string> };
 
 /** Prefer the launch recipe ChatGPT itself generates (survives app updates); fall back to the known one. */
 function launchRecipe(): Launch | null {
+  if (process.platform !== "darwin") return null;
   const base: Record<string, string> = {
     PATH: process.env.PATH ?? "/usr/bin:/bin",
     HOME,

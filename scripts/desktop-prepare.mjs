@@ -3,7 +3,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
-import { execFileSync } from "node:child_process";
+
 
 const root = path.resolve(import.meta.dirname, "..");
 const out = path.join(root, ".next/standalone");
@@ -43,8 +43,33 @@ for (const entry of fs.readdirSync(out)) if (!KEEP.has(entry)) fs.rmSync(path.jo
 const app = path.join(root, ".desktop/server");
 fs.rmSync(app, { recursive: true, force: true });
 fs.mkdirSync(path.dirname(app), { recursive: true });
-execFileSync("cp", ["-RP", out, app]); // -P copies symlinks as they are
-const links = execFileSync("find", [app, "-type", "l"], { encoding: "utf8" }).trim().split("\n").filter(Boolean);
+fs.cpSync(out, app, { recursive: true, dereference: process.platform === "win32", verbatimSymlinks: process.platform !== "win32" });
+// Dereferencing pnpm junctions removes the per-package dependency lookup chain.
+// Expose traced transitive packages at the root for the junction-free Windows bundle.
+if (process.platform === "win32") {
+  const modules = path.join(app, "node_modules");
+  for (const entry of fs.readdirSync(path.join(modules, ".pnpm"))) {
+    const nested = path.join(modules, ".pnpm", entry, "node_modules");
+    if (!fs.existsSync(nested)) continue;
+    for (const name of fs.readdirSync(nested)) {
+      if (name.startsWith(".")) continue;
+      const packages = name.startsWith("@") ? fs.readdirSync(path.join(nested, name)).map((p) => `${name}/${p}`) : [name];
+      for (const pkg of packages) {
+        const dest = path.join(modules, pkg);
+        if (!fs.existsSync(dest)) fs.cpSync(path.join(nested, pkg), dest, { recursive: true, dereference: true });
+      }
+    }
+  }
+}
+const links = [];
+function walk(dir) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const file = path.join(dir, entry.name);
+    if (entry.isSymbolicLink()) links.push(file);
+    else if (entry.isDirectory()) walk(file);
+  }
+}
+walk(app);
 const escaping = links.filter((l) => {
   const target = fs.readlinkSync(l);
   return path.isAbsolute(target) || !path.resolve(path.dirname(l), target).startsWith(app + path.sep) || !fs.existsSync(l);

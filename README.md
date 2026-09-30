@@ -101,3 +101,32 @@ The dots use OpenAI's built-in `web_search` and `computer` tools, or OpenRouter'
 ## Built with
 
 [OpenAI](https://platform.openai.com) (GPT-5.5 through the Responses API, Realtime for voice, computer use), [OpenRouter](https://openrouter.ai) for open models, [Composio](https://composio.dev), [Next.js](https://nextjs.org), [Electron](https://www.electronjs.org), [Playwright](https://playwright.dev) with your installed Chrome, [E2B](https://e2b.dev) and SQLite.
+
+## Windows fork
+
+Build a Windows x64 installer with Node 22+ and pnpm:
+
+```powershell
+pnpm install
+pnpm desktop:build:win
+```
+
+The installer is `dist/Open Dot Setup 0.1.0.exe`. It is currently unsigned.
+Install Google Chrome, or run `pnpm exec playwright install chromium` under the
+Windows account that will run the app. Chromium is not included in the installer.
+
+Closing the window keeps dots running in the system tray. Double-click the tray
+icon to reopen; choose Quit from its menu to stop. Data is stored under
+`%APPDATA%/Open Dot/data`, and the server log is `%APPDATA%/Open Dot/server.log`.
+Windows protects the vault master key with DPAPI for the current Windows user.
+Backups of that encrypted key cannot be decrypted under a different Windows account.
+
+Local commands use Windows PowerShell. Docker Desktop with Linux containers and
+E2B computers continue to use bash. The workspace folder is not an OS sandbox;
+local command execution still requires the existing approval flow. Mac native app
+control is disabled on Windows; browser control remains available. API keys and
+connected app accounts are configured in Settings as upstream describes.
+
+For development, run `pnpm dev` and `pnpm desktop:dev` in separate terminals.
+The Windows port has build validation; voice, OAuth, scheduled tasks and agent
+execution with live credentials still need end-to-end testing.
